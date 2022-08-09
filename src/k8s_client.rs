@@ -1,7 +1,9 @@
 use k8s_openapi::api::core::v1::{Node, Namespace};
 use kube::{api::ListParams, Api, Client, Resource};
 use serde_json::Error;
+use snafu::Snafu;
 
+/*
 /// K8sResourceError holds errors that can obtain while fetching
 /// information of Kubernetes Objects
 #[allow(clippy::enum_variant_names)]
@@ -15,57 +17,66 @@ pub(crate) enum K8sResourceError {
     SerdeError(Error)
 }
 
+ */
+#[derive(Debug, Snafu)]
+#[allow(clippy::enum_variant_names)]
+pub(crate) enum K8sResourceError {
+    #[snafu(display(
+    "ClientConfigError : {}",
+    source
+    ))]
+    /// Error generated when the loop stops processing
+    ClientConfigError {
+        source: kube::config::KubeconfigError,
+    },
+    #[snafu(display("Json Parse Error : {}", source))]
+    SerdeError {
+        source: serde_json::Error,
+    },
+    #[snafu(display("InferConfigError: {}", source))]
+    InferConfigError {
+        source: kube::config::InferConfigError,
+    },
+    #[snafu(display("K8Client Error: {}", source))]
+    ClientError {
+        source: kube::Error,
+    },
+    Noun {},
+}
+
 impl From<kube::config::KubeconfigError> for K8sResourceError {
-    fn from(e: kube::config::KubeconfigError) -> K8sResourceError {
-        K8sResourceError::ClientConfigError(e)
+    fn from(source: kube::config::KubeconfigError) -> Self {
+        Self::ClientConfigError{source}
     }
 }
 
 impl From<kube::config::InferConfigError> for K8sResourceError {
-    fn from(e: kube::config::InferConfigError) -> K8sResourceError {
-        K8sResourceError::InferConfigError(e)
+    fn from(source: kube::config::InferConfigError) -> Self {
+        Self::InferConfigError{source}
     }
 }
-impl From<Box<dyn std::error::Error>> for K8sResourceError {
-    fn from(e: Box<dyn std::error::Error>) -> K8sResourceError {
-        K8sResourceError::ResourceError(e)
-    }
-}
+
 
 impl From<kube::Error> for K8sResourceError {
-    fn from(e: kube::Error) -> K8sResourceError {
-        K8sResourceError::ClientError(e)
+    fn from(source: kube::Error) -> Self {
+        Self::ClientError{source}
     }
 }
-
 
 impl From<Error> for K8sResourceError {
-    fn from(e: Error) -> K8sResourceError {
-        K8sResourceError::SerdeError(e)
-    }
-}
-
-impl From<String> for K8sResourceError {
-    fn from(e: String) -> K8sResourceError {
-        K8sResourceError::CustomError(e)
-    }
-}
-
-impl K8sResourceError {
-    /// Returns K8sResourceError from provided message
-    pub fn invalid_k8s_resource_value(err: String) -> Self {
-        Self::CustomError(err)
+    fn from(source: Error) -> Self {
+        Self::SerdeError{source}
     }
 }
 
 /// ClientSet is wrapper Kubernetes clientset and namespace of mayastor service
 #[derive(Clone)]
-pub(crate) struct ClientSet {
+pub struct K8sClient {
     kube_config: kube::Config,
     client: kube::Client,
 }
 
-impl ClientSet {
+impl K8sClient {
     /// Create a new ClientSet, from the config file if provided, otherwise with default.
     pub(crate) async fn new(
         kube_config_path: Option<std::path::PathBuf>

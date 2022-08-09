@@ -7,29 +7,60 @@ use log::{debug, error, log_enabled, info, Level};
 use std::error::Error;
 use crate::report_models::{Pools, Replicas, Report, Volumes};
 use std::time::Duration as OtherDuration;
+use clap::{App, Arg};
 
 use futures::{SinkExt, StreamExt, TryStreamExt};
+use kube::runtime::utils;
 use tokio;
 use sha256::digest;
-use crate::client::{ReqwestClient, ReqwestClientError};
-use crate::k8s_client::{ClientSet, K8sResourceError};
+use crate::client::{ReqwestClient};
+use crate::k8s_client::{K8sClient};
 
 const PRODUCT: &str = "Bolt";
 
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let k =generate_report().await.unwrap();
+    let matches = App::new(clap::crate_description!())
+        .author(clap::crate_authors!())
+        .version(clap::crate_version!())
+        .settings(&[
+            clap::AppSettings::ColoredHelp,
+            clap::AppSettings::ColorAlways,
+        ])
+        .arg(
+            Arg::with_name("endpoint")
+                .long("endpoint")
+                .short('e')
+                .default_value("http://ksnode-1:30011")
+                .help("an URL endpoint to the control plane's rest endpoint"),
+        )
+        .arg(
+            Arg::with_name("namespace")
+                .long("namespace")
+                .short('n')
+                .default_value("mayastor")
+                .help("the default namespace we are supposed to operate in"),
+        )
+        .get_matches();
+    let namespace = matches.value_of("namespace").map(|s| s.to_string()).unwrap();
+    let endpoint= matches.value_of("endpoint").unwrap();
+    let version = clap::crate_version!().to_string();
+
+    let k8s_client = K8sClient::new(None).await.unwrap();
+    let reqwest_client = ReqwestClient::new(endpoint).unwrap();
+
+    let k =generate_report(k8s_client.clone(),reqwest_client.clone()).await.unwrap();
 
 
     Ok(())
 }
 
-pub async fn generate_report() -> Result<(), Box<dyn std::error::Error>>
+pub async fn generate_report(k8s_client:K8sClient, reqwest_client : ReqwestClient) -> Result<(), Box<dyn std::error::Error>>
 {
-    let k8s_client = ClientSet::new(None).await.unwrap();
+    //let k8s_client = K8sClient::new(None).await.unwrap();
     let mut report = Report::new();
     report.product_name = Some(PRODUCT.to_string());
     let k8s_node_count = k8s_client.get_nodes().await;
@@ -46,7 +77,7 @@ pub async fn generate_report() -> Result<(), Box<dyn std::error::Error>>
             error!("{:?}",err);
         }
     };
-    let reqwest_client = ReqwestClient::new("https://68754317-a104-4536-8d54-53130873a100.mock.pstmn.io").unwrap();
+
     let nodes = reqwest_client.get_nodes().await;
     match nodes {
         Ok(nodes) => report.storage_node_count = Some(nodes.len() as u64),

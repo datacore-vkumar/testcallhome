@@ -5,8 +5,34 @@ use reqwest::RequestBuilder as ReqwestRequestBuilder;
 use reqwest::Response as ReqwestResponse;
 use crate::api_models::{NodesApi, PoolsApi, ReplicasApi, VolumesApi};
 use url::{Url as OtherUrl, ParseError};
+use snafu::Snafu;
 
-
+#[derive(Debug, Snafu)]
+#[allow(clippy::enum_variant_names)]
+pub(crate) enum ReqwestClientError {
+    #[snafu(display(
+    "Http Error : {}",
+    name
+    ))]
+    /// Error generated when the loop stops processing
+    HttpError {
+        name: String,
+    },
+    #[snafu(display("Json Parse Error : {}", source))]
+    SerdeError {
+        source: serde_json::Error,
+    },
+    #[snafu(display("Reqwest client error: {}", source))]
+    ReqwestError {
+        source: reqwest::Error,
+    },
+    #[snafu(display("Url Parse Error: {}", source))]
+    ParseError {
+        source: url::ParseError,
+    },
+    Noun {},
+}
+/*
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 pub(crate) enum ReqwestClientError {
@@ -21,37 +47,38 @@ impl From<Box<dyn std::error::Error>> for ReqwestClientError {
         ReqwestClientError::ResourceError(e)
     }
 }
+*/
 
 impl From<String> for ReqwestClientError {
-    fn from(e: String) -> ReqwestClientError {
-        ReqwestClientError::HttpError(e)
+    fn from(name: String) -> Self {
+        Self::HttpError{name}
     }
 }
 impl From<serde_json::Error> for ReqwestClientError {
-    fn from(e: serde_json::Error) -> ReqwestClientError {
-        ReqwestClientError::SerdeError(e)
+    fn from(source: serde_json::Error) -> Self {
+        Self::SerdeError{source}
     }
 }
 
 impl From<reqwest::Error> for ReqwestClientError {
-    fn from(e: reqwest::Error) -> ReqwestClientError {
-        ReqwestClientError::ReqwestError(e)
+    fn from(source: reqwest::Error) -> Self {
+        Self::ReqwestError{source}
     }
 }
 
 impl From<url::ParseError> for ReqwestClientError {
-    fn from(e: url::ParseError) -> ReqwestClientError {
-        ReqwestClientError::ParseError(e)
+    fn from(source: url::ParseError) -> Self {
+        Self::ParseError {source}
     }
 }
 impl ReqwestClientError {
     /// Returns K8sResourceError from provided message
-    pub fn invalid_http_response_error(err: String) -> Self {
-        Self::HttpError(err)
+    pub fn invalid_http_response_error(name: String) -> Self {
+        Self::HttpError{name}
     }
 }
-
-pub(crate) struct ReqwestClient {
+#[derive(Clone)]
+pub struct ReqwestClient {
     client: Client,
     base_url: Url
 }
