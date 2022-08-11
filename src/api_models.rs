@@ -1,4 +1,3 @@
-use serde_json::Value;
 use serde::Serialize;
 use serde::Deserialize;
 
@@ -41,5 +40,5 @@ pub struct NodesApi
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ReplicasApi
 {
-   pub node : String,
+    pub node : String,
 }

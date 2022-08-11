@@ -1,5 +1,5 @@
 use k8s_openapi::api::core::v1::{Node, Namespace};
-use kube::{api::ListParams, Api, Client, Resource};
+use kube::{ Api, Client};
 use serde_json::Error;
 use snafu::Snafu;
 
@@ -20,11 +20,9 @@ pub(crate) enum K8sResourceError {
  */
 #[derive(Debug, Snafu)]
 #[allow(clippy::enum_variant_names)]
-pub(crate) enum K8sResourceError {
+pub enum K8sResourceError {
     #[snafu(display(
-    "ClientConfigError : {}",
-    source
-    ))]
+    "ClientConfigError : {}", source))]
     /// Error generated when the loop stops processing
     ClientConfigError {
         source: kube::config::KubeconfigError,
@@ -72,27 +70,15 @@ impl From<Error> for K8sResourceError {
 /// ClientSet is wrapper Kubernetes clientset and namespace of mayastor service
 #[derive(Clone)]
 pub struct K8sClient {
-    kube_config: kube::Config,
-    client: kube::Client,
+    client: kube::Client
 }
 
 impl K8sClient {
     /// Create a new ClientSet, from the config file if provided, otherwise with default.
-    pub(crate) async fn new(
-        kube_config_path: Option<std::path::PathBuf>
-    ) -> Result<Self, K8sResourceError> {
-        let config = match kube_config_path {
-            Some(config_path) => {
-                let kube_config = kube::config::Kubeconfig::read_from(&config_path)
-                    .map_err(|e| -> K8sResourceError { e.into() })?;
-                kube::Config::from_custom_kubeconfig(kube_config, &Default::default()).await?
-            }
-            None => kube::Config::infer().await?,
-        };
-        let client = Client::try_from(config.clone())?;
+    pub(crate) async fn new() -> Result<Self, K8sResourceError> {
+        let client = Client::try_default().await?;
         Ok(Self {
-            client,
-            kube_config: config,
+            client
         })
     }
 
@@ -116,68 +102,3 @@ impl K8sClient {
         Ok(json_object["metadata"]["uid"].to_string())
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*use kube::{Api, Client, Error};
-use k8s_openapi::api::core::v1::Node;
-use k8s_openapi::api::core::v1::Namespace;
-
-pub struct K8sClient {
-    client: Client,
-}
-
-impl K8sClient {
-    pub async fn new() -> Result<Self, Error>
-    {
-        let k8s_client = Client::try_default().await?;
-        Ok(Self {
-            client: k8s_client,
-        })
-    }
-    pub async fn get_nodes(&self) -> Option<usize>
-    {
-        let nodes: Api<Node> = Api::all(self.client.clone());
-        let list = nodes.list(&Default::default()).await;
-        match list {
-            Ok(list) => Some(list.items.len()),
-            Err(err) => {
-                println!("{:?}",err);
-                None
-            }
-        }
-    }
-
-    pub async fn get_cluster_id(&self) -> Option<String>
-    {
-        let namespace_api: Api<Namespace> = Api::all(self.client.clone());
-        let kube_system_namespace = namespace_api.get("kube-system").await.unwrap();
-        let json_object = serde_json::to_value(&kube_system_namespace);
-        match json_object {
-            Ok(json_object) => Some(json_object["metadata"]["uid"].to_string()),
-            Err(err) => {
-                println!("{:?}",err);
-                None
-            }
-        }
-    }
-}
-
- */

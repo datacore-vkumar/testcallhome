@@ -1,19 +1,14 @@
 mod api_models;
 mod report_models;
-mod client;
+mod http_client;
 mod k8s_client;
 use log::{debug, error, log_enabled, info, Level};
-
-use std::error::Error;
+use std::{thread, time};
 use crate::report_models::{Pools, Replicas, Report, Volumes};
-use std::time::Duration as OtherDuration;
 use clap::{App, Arg};
-
-use futures::{SinkExt, StreamExt, TryStreamExt};
-use kube::runtime::utils;
 use tokio;
 use sha256::digest;
-use crate::client::{ReqwestClient};
+use crate::http_client::{ReqwestClient};
 use crate::k8s_client::{K8sClient};
 
 const PRODUCT: &str = "Bolt";
@@ -34,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
             Arg::with_name("endpoint")
                 .long("endpoint")
                 .short('e')
-                .default_value("http://ksnode-1:30011")
+                .default_value("http://127.0.0.1:8081")
                 .help("an URL endpoint to the control plane's rest endpoint"),
         )
         .arg(
@@ -47,20 +42,22 @@ async fn main() -> anyhow::Result<()> {
         .get_matches();
     let namespace = matches.value_of("namespace").map(|s| s.to_string()).unwrap();
     let endpoint= matches.value_of("endpoint").unwrap();
-    let version = clap::crate_version!().to_string();
+    let version = clap::crate_version!();
 
-    let k8s_client = K8sClient::new(None).await.unwrap();
+    let k8s_client = K8sClient::new().await.unwrap();
     let reqwest_client = ReqwestClient::new(endpoint).unwrap();
 
     let k =generate_report(k8s_client.clone(),reqwest_client.clone()).await.unwrap();
 
-
-    Ok(())
+    loop{
+        let time_to_sleep = time::Duration::from_secs(60);
+        thread::sleep(time_to_sleep);
+        let k =generate_report(k8s_client.clone(),reqwest_client.clone()).await.unwrap();
+    }
 }
 
 pub async fn generate_report(k8s_client:K8sClient, reqwest_client : ReqwestClient) -> Result<(), Box<dyn std::error::Error>>
 {
-    //let k8s_client = K8sClient::new(None).await.unwrap();
     let mut report = Report::new();
     report.product_name = Some(PRODUCT.to_string());
     let k8s_node_count = k8s_client.get_nodes().await;
@@ -121,31 +118,3 @@ pub async fn generate_report(k8s_client:K8sClient, reqwest_client : ReqwestClien
 
     Ok(())
 }
-
-/*
-#[allow(clippy::enum_variant_names)]
-#[derive(Debug)]
-pub(crate) enum CallHomeError {
-    ResourceError(Box<dyn std::error::Error>),
-    K8sError(K8sResourceError),
-    ReqwestError(ReqwestClientError),
-}
-impl From<Box<dyn std::error::Error>> for CallHomeError {
-    fn from(e: Box<dyn std::error::Error>) -> CallHomeError {
-        CallHomeError::ResourceError(e)
-    }
-}
-
-impl From<K8sResourceError> for CallHomeError {
-    fn from(e: K8sResourceErrorr) -> CallHomeError {
-        CallHomeError::K8sError(e)
-    }
-}
-
-impl From<ReqwestClientError> for CallHomeError {
-    fn from(e: ReqwestClientError) -> CallHomeError {
-        CallHomeError::ReqwestError(e)
-    }
-}
-
- */
