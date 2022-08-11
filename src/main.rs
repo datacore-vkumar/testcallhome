@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
             Arg::with_name("endpoint")
                 .long("endpoint")
                 .short('e')
-                .default_value("http://127.0.0.1:8081")
+                .default_value("http://mayastor-api-rest:8081")
                 .help("an URL endpoint to the control plane's rest endpoint"),
         )
         .arg(

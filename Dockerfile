@@ -1,20 +1,8 @@
-FROM rust:latest as builder
+FROM rust:latest
+WORKDIR /usr/src/myapp
 
-WORKDIR /app
+COPY . .
 
-# create a new empty project
-RUN cargo init
+RUN cargo build --release
 
-COPY ./.cargo .cargo
-COPY ./vendor vendor
-COPY Cargo.toml Cargo.lock ./
-# build dependencies, when my source code changes, this build can be cached, we don't need to compile dependency again.
-RUN cargo build
-# remove the dummy build.
-RUN cargo clean -p callhome
-
-RUN cargo install --path .
-
-# second stage.
-FROM gcr.io/distroless/cc-debian11
-COPY --from=builder /usr/local/cargo/bin/* /usr/local/bin
+CMD cargo run
