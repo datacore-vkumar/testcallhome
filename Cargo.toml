@@ -27,3 +27,6 @@ snafu = "0.7.1"
 anyhow = "1.0.60"
 tracing = "0.1.36"
 
+[env]
+RUST_LOG="info"
+

@@ -1,39 +1,42 @@
 use serde::Serialize;
 use serde::Deserialize;
-use crate::api_models::{PoolsApi, VolumesApi, VolumeStats};
+use crate::api_models;
 
+///Volumes contains volume count, min,max,mean and capacity percentiles
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Volumes
 {
     pub count: u64,
-    pub max_size_in_bytes: u64,
     pub min_size_in_bytes: u64,
-    pub mean_size_in_bytes: f64,
+    pub mean_size_in_bytes: u64,
+    pub max_size_in_bytes: u64,
     pub capacity_percentiles_in_bytes: Percentiles
 }
 impl Volumes {
+    ///Return a volume object with default values
     pub(crate) fn default() -> Self
     {
         Self {
             count: 0,
-            mean_size_in_bytes: 0.0,
+            mean_size_in_bytes: 0,
             min_size_in_bytes: 0,
             max_size_in_bytes: 0,
             capacity_percentiles_in_bytes: Percentiles::default(),
         }
     }
-    pub(crate) fn new(volume_entries:VolumesApi) -> Self
+    ///Receives a api_models::Volumes object and returns a new report_models::volume object by using the data provided
+    pub(crate) fn new(volumes:api_models::Volumes) -> Self
     {
-        let volumes_size_vector = convert_volumes_into_volumes_size_vector(volume_entries.entries);
+        let volumes_size_vector = get_volumes_size_vector(volumes.entries);
         if volumes_size_vector.len() > 0
         {
             return Self {
                 count: volumes_size_vector.len() as u64,
-                max_size_in_bytes: find_max(volumes_size_vector.clone()),
-                min_size_in_bytes: find_min(volumes_size_vector.clone()),
-                mean_size_in_bytes: find_mean(volumes_size_vector.clone()),
-                capacity_percentiles_in_bytes: Percentiles::new(volumes_size_vector.clone()),
+                max_size_in_bytes: get_max_value(volumes_size_vector.clone()),
+                min_size_in_bytes: get_min_value(volumes_size_vector.clone()),
+                mean_size_in_bytes: get_mean_value(volumes_size_vector.clone()),
+                capacity_percentiles_in_bytes: Percentiles::new(volumes_size_vector),
             };
         }
         Self::default()
@@ -47,36 +50,39 @@ pub struct Pools
     pub count: u64,
     pub max_size_in_bytes: u64,
     pub min_size_in_bytes: u64,
-    pub mean_size_in_bytes: f64,
+    pub mean_size_in_bytes: u64,
     pub capacity_percentiles_in_bytes: Percentiles
 }
 impl Pools {
+    ///Returns pools object with default values
     pub(crate) fn default() -> Self
     {
         Self {
             count: 0,
             max_size_in_bytes: 0,
             min_size_in_bytes: 0,
-            mean_size_in_bytes: 0.0,
+            mean_size_in_bytes: 0,
             capacity_percentiles_in_bytes: Percentiles::default()
         }
     }
-    pub(crate) fn new(pools:Vec<PoolsApi>) -> Self
+    ///Receives a vector of api_models::Pools and returns a new Reports::Pools object by using the data provided
+    pub(crate) fn new(pools:Vec<api_models::Pools>) -> Self
     {
-        let pools_size_vector = convert_pools_into_pools_size_vector(pools);
+        let pools_size_vector = get_pools_size_vector(pools);
         if pools_size_vector.len() > 0
         {
             return Self {
                 count: pools_size_vector.len() as u64,
-                max_size_in_bytes: find_max(pools_size_vector.clone()),
-                min_size_in_bytes: find_min(pools_size_vector.clone()),
-                mean_size_in_bytes: find_mean(pools_size_vector.clone()),
-                capacity_percentiles_in_bytes: Percentiles::new(pools_size_vector.clone())
+                max_size_in_bytes: get_max_value(pools_size_vector.clone()),
+                min_size_in_bytes: get_min_value(pools_size_vector.clone()),
+                mean_size_in_bytes: get_mean_value(pools_size_vector.clone()),
+                capacity_percentiles_in_bytes: Percentiles::new(pools_size_vector)
             };
         }
         Self::default()
     }
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Replicas
@@ -85,6 +91,7 @@ pub struct Replicas
     count_per_volume_percentiles: Percentiles,
 }
 impl Replicas {
+    ///Returns a replica object with default values
     pub fn default() -> Self
     {
         Self {
@@ -92,12 +99,14 @@ impl Replicas {
             count_per_volume_percentiles: Percentiles::default(),
         }
     }
-    pub fn new(replica_count : usize, volumes: Option<VolumesApi>) -> Self
+
+    ///Receives a Option<api_models::Volumes> and replica_count and returns a new report_models::replica object by using the data provided
+    pub fn new(replica_count : usize, volumes: Option<api_models::Volumes>) -> Self
     {
         let mut replicas = Self::default();
         match volumes {
             Some(volumes) => {
-                let replicas_size_vector = convert_volumes_into_replicas_size_vector(volumes.entries);
+                let replicas_size_vector = get_replicas_size_vector(volumes.entries);
                 if replicas_size_vector.len()>0
                 {
                     replicas.count_per_volume_percentiles = Percentiles::new(replicas_size_vector.clone());
@@ -121,7 +130,7 @@ pub struct Versions
     control_plane_version: String,
 }
 impl Versions {
-    pub(crate) fn new() -> Self
+    pub(crate) fn default() -> Self
     {
         Self {
             control_plane_version: String::new(),
@@ -141,6 +150,7 @@ pub struct Percentiles
 }
 
 impl Percentiles {
+    ///Returns Percentiles with default values
     pub(crate) fn default() -> Self
     {
         Self {
@@ -149,13 +159,13 @@ impl Percentiles {
             percentile_90: 0,
         }
     }
-
+    /// Receives  a Vec<u64> and returns Percentiles
     pub(crate) fn new(values: Vec<u64>) -> Self
     {
         Self {
-            percentile_50: find_percentiles(values.clone(), 50),
-            percentile_75: find_percentiles(values.clone(), 75),
-            percentile_90: find_percentiles(values.clone(), 90),
+            percentile_50: get_percentile(values.clone(), 50),
+            percentile_75: get_percentile(values.clone(), 75),
+            percentile_90: get_percentile(values, 90),
         }
     }
 }
@@ -163,77 +173,73 @@ impl Percentiles {
 #[serde(rename_all = "camelCase")]
 pub struct Report
 {
-    pub k8s_cluster_id:Option<String>,
-    pub k8s_node_count: Option<u64>,
-    pub product_name: Option<String>,
-    pub product_version: Option<String>,
-    pub deploy_namespace: Option<String>,
-    pub storage_node_count:Option<u64>,
-    pub pools : Option<Pools>,
-    pub volumes : Option<Volumes>,
-    pub replicas: Option<Replicas>,
-    pub versions : Option<Versions>,
+    pub k8s_cluster_id:String,
+    pub k8s_node_count: u8,
+    pub product_name: String,
+    pub product_version: String,
+    pub deploy_namespace: String,
+    pub storage_node_count:u8,
+    pub pools : Pools,
+    pub volumes : Volumes,
+    pub replicas: Replicas,
+    pub versions : Versions,
 }
 impl Report
 {
     pub(crate) fn new() -> Self
     {
         Self{
-            k8s_cluster_id: None,
-            k8s_node_count: None,
-            product_name: None,
-            product_version: None,
-            deploy_namespace: None,
-            storage_node_count: None,
-            pools: None,
-            volumes: None,
-            replicas: None,
-            versions: None,
+            k8s_cluster_id: String::new(),
+            k8s_node_count: 0,
+            product_name: String::new(),
+            product_version: String::new(),
+            deploy_namespace: String::new(),
+            storage_node_count: 0,
+            pools: Pools::default(),
+            volumes: Volumes::default(),
+            replicas: Replicas::default(),
+            versions: Versions::default(),
         }
     }
 }
 
-fn find_max(values: Vec<u64>) -> u64
+/// Get maximum value from a vector
+fn get_max_value(values: Vec<u64>) -> u64
 {
     *values.iter().max().unwrap()
 }
-fn find_min(values : Vec<u64>) -> u64
+/// Get minimum value from a vector
+fn get_min_value(values : Vec<u64>) -> u64
 {
     *values.iter().min().unwrap()
 }
-fn find_mean(values : Vec<u64>) -> f64
+/// Get mean of all values from a vector
+fn get_mean_value(values : Vec<u64>) -> u64
 {
     let mut sum= 0.0;
     for value in values.iter() {
         sum += *value as f64/(values.len() as f64);
     }
-    sum
+    sum as u64
 }
 
-fn find_percentiles(mut values: Vec<u64>, percentile : usize) -> u64
+///Get percentile value from a vector
+fn get_percentile(mut values: Vec<u64>, percentile : usize) -> u64
 {
     values.sort();
-    if (percentile * values.len()) % 100 == 0
+    let index_as_f64 = (percentile as f64) * (values.len() - 1) as f64 / 100.0;
+    let index = (percentile * (values.len()-1)) / 100;
+
+    if index_as_f64 - index as f64 > 0.0
     {
-        let index = percentile*values.len()/100;
-        if index > 0
-        {
-            values[index - 1]
-        }
-        else {
-            values[index]
-        }
-    }
-    else {
-        let index = (percentile*values.len())/100;
-        if index > 0
-        {
-            return (values[index] + values[index-1])/2;
-        }
+        (values[index] as f64 + (index_as_f64 - index as f64) * (values[index + 1] - values[index]) as f64) as u64
+    } else {
         values[index]
     }
 }
-fn convert_volumes_into_volumes_size_vector(volumes: Vec<VolumeStats>) -> Vec<u64>
+
+///Gets a vector containing volume sizes from Vec<VolumeStats>
+fn get_volumes_size_vector(volumes: Vec<api_models::VolumeStats>) -> Vec<u64>
 {
     let mut volume_size_vector = Vec::new();
     for volume in volumes.iter() {
@@ -241,7 +247,8 @@ fn convert_volumes_into_volumes_size_vector(volumes: Vec<VolumeStats>) -> Vec<u6
     }
     volume_size_vector
 }
-fn convert_volumes_into_replicas_size_vector(volumes: Vec<VolumeStats>) -> Vec<u64>
+///Gets a vector containing replica sizes from Vec<api_models::VolumeStats>
+fn get_replicas_size_vector(volumes: Vec<api_models::VolumeStats>) -> Vec<u64>
 {
     let mut replicas_size_vector = Vec::new();
     for volume in volumes.iter() {
@@ -249,7 +256,9 @@ fn convert_volumes_into_replicas_size_vector(volumes: Vec<VolumeStats>) -> Vec<u
     }
     replicas_size_vector
 }
-fn convert_pools_into_pools_size_vector(pools: Vec<PoolsApi>) -> Vec<u64>
+
+///Gets a vector containing pool sizes from Vec<api_models::Pools>
+fn get_pools_size_vector(pools: Vec<api_models::Pools>) -> Vec<u64>
 {
     let mut pools_size_vector = Vec::new();
     for pool in pools.iter() {
